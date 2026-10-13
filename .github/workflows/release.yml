@@ -1,0 +1,35 @@
+name: 发布二进制
+on:
+  push:
+    tags: ['v*.*.*']
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.26.8'
+      - name: 验证并交叉编译
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          test "$RELEASE_TAG" = "$(cat VERSION)"
+          go test -race ./...
+          go vet ./...
+          python scripts/package.py --version "$RELEASE_TAG"
+      - name: 从准确标签发布附件
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" dist/*.tar.gz dist/*.zip dist/SHA256SUMS dist/release.json install.sh \
+            --verify-tag --draft --title "registryctl $RELEASE_TAG" --notes-file docs/release-notes.md
+          gh release edit "$RELEASE_TAG" --draft=false --latest

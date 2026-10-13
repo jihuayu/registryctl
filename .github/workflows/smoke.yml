@@ -1,0 +1,35 @@
+name: 真实 Registry 推送验收
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: 准备最小 OCI 镜像
+        run: python scripts/smoke-image.py "$RUNNER_TEMP/image.oci"
+      - name: 直传并发布
+        id: push
+        uses: ./
+        with:
+          source: ${{ runner.temp }}/image.oci
+          image: registry.jihuayu.com/home/registry:registryctl-ci-${{ github.run_id }}
+        env:
+          REGISTRY_ACCOUNT_CLIENT_ID: ${{ secrets.REGISTRY_ACCOUNT_CLIENT_ID }}
+          REGISTRY_ACCOUNT_CLIENT_SECRET: ${{ secrets.REGISTRY_ACCOUNT_CLIENT_SECRET }}
+      - name: 原生 Docker digest 拉取
+        env:
+          CLIENT_ID: ${{ secrets.REGISTRY_ACCOUNT_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.REGISTRY_ACCOUNT_CLIENT_SECRET }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+          DOCKER_CONFIG: ${{ runner.temp }}/registryctl-docker
+        run: |
+          printf '%s' "$CLIENT_SECRET" | docker login registry.jihuayu.com --username "$CLIENT_ID" --password-stdin
+          if ! docker pull "registry.jihuayu.com/home/registry@$DIGEST" > "$RUNNER_TEMP/registryctl-docker-pull.log" 2>&1; then
+            echo '原生 Docker 拉取失败，短期签名 URL 诊断未输出到公开日志' >&2
+            exit 1
+          fi
+          printf '原生 Docker 拉取通过：%s\n' "$DIGEST"
+          docker logout registry.jihuayu.com

@@ -1,0 +1,71 @@
+name: registryctl
+description: 安装 registryctl，并使用 Account 机器身份将 OCI 镜像直接上传 R2
+author: jihuayu
+branding:
+  icon: upload-cloud
+  color: blue
+inputs:
+  version:
+    description: 二进制完整版本；留空使用当前 Action 提交的 VERSION
+    default: ''
+  source:
+    description: OCI layout 目录或 OCI archive；留空仅安装
+    default: ''
+  image:
+    description: REGISTRY/REPOSITORY:TAG；推送时必填
+    default: ''
+outputs:
+  digest:
+    description: 推送成功后的 Manifest 或 Index digest
+    value: ${{ steps.push.outputs.digest }}
+  image:
+    description: 推送的完整镜像名称
+    value: ${{ steps.push.outputs.image }}
+runs:
+  using: composite
+  steps:
+    - name: 安装并校验 registryctl
+      shell: bash
+      env:
+        REGISTRYCTL_VERSION: ${{ inputs.version }}
+        REGISTRYCTL_ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        version="$REGISTRYCTL_VERSION"
+        if [ -z "$version" ]; then version="$(cat "$REGISTRYCTL_ACTION_PATH/VERSION")"; fi
+        bin_dir="$RUNNER_TEMP/registryctl/bin"
+        sh "$REGISTRYCTL_ACTION_PATH/install.sh" --version "$version" --bin-dir "$bin_dir"
+        printf '%s\n' "$bin_dir" >> "$GITHUB_PATH"
+    - name: 推送 OCI 镜像
+      id: push
+      shell: bash
+      env:
+        REGISTRYCTL_SOURCE: ${{ inputs.source }}
+        REGISTRYCTL_IMAGE: ${{ inputs.image }}
+      run: |
+        set -euo pipefail
+        if [ -z "$REGISTRYCTL_SOURCE" ] && [ -z "$REGISTRYCTL_IMAGE" ]; then exit 0; fi
+        if [ -z "$REGISTRYCTL_SOURCE" ] || [ -z "$REGISTRYCTL_IMAGE" ]; then
+          echo '推送必须同时指定 source 和 image' >&2
+          exit 1
+        fi
+        if [ -z "${REGISTRY_ACCOUNT_CLIENT_ID:-}" ] || [ -z "${REGISTRY_ACCOUNT_CLIENT_SECRET:-}" ]; then
+          echo '请通过 GitHub Secrets 提供 Account 机器客户端 ID 和 Secret' >&2
+          exit 1
+        fi
+        result="$(mktemp "$RUNNER_TEMP/registryctl-result.XXXXXX")"
+        trap 'rm -f "$result"' EXIT
+        registryctl push "$REGISTRYCTL_SOURCE" "$REGISTRYCTL_IMAGE" > "$result"
+        python3 - "$result" <<'PY'
+        import json, os, re, sys
+        value = json.load(open(sys.argv[1], encoding='utf-8'))
+        digest = value['digest']
+        if not re.fullmatch(r'sha256:[a-f0-9]{64}', digest):
+            raise SystemExit('推送结果 digest 无效')
+        image = os.environ['REGISTRYCTL_IMAGE']
+        if '\n' in image or '\r' in image:
+            raise SystemExit('镜像名称不能含换行')
+        with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+            output.write('digest=' + digest + '\nimage=' + image + '\n')
+        print('已发布 ' + image + '@' + digest)
+        PY
