@@ -1,0 +1,43 @@
+{
+  "sourceRepository": "https://github.com/jihuayu/home-service",
+  "sourceRevision": "b065b516260d8babf1d057981e6682dd16b7fca6",
+  "scope": "仅客户端、OCI 输入、Account HTTP 客户端和协议类型；无服务端、部署配置或凭据",
+  "files": [
+    {
+      "source": "cmd/registryctl/main.go",
+      "sourceSha256": "4dcd9f74ff9990c834f8be968eac835181b14cec05b97b72dd077de71fe330f6"
+    },
+    {
+      "source": "internal/client/client.go",
+      "sourceSha256": "df31c600c7ed29b3f52e75d0b1d5e39ee475faca4fa7c57771c0a89b5eec61eb"
+    },
+    {
+      "source": "internal/client/login.go",
+      "sourceSha256": "f06bb3cc65350e2481c890fda9adc00c91418a7145610ce5f124fc518b1c7b21"
+    },
+    {
+      "source": "internal/client/upload.go",
+      "sourceSha256": "811723857846b2b2853de4547a958e777270feab270b9475ba0d144fec0ab7da"
+    },
+    {
+      "source": "internal/account/account.go",
+      "sourceSha256": "79956e42e36c317b2b30fd3c380c566757a7c0095f9c2c208424794218a69671"
+    },
+    {
+      "source": "internal/account/account_test.go",
+      "sourceSha256": "8cc61958715dec5e6630cf9d3d41c7a2a4c0bb9dc4a6bfcab174a1268cd3c6e7"
+    },
+    {
+      "source": "internal/model/model.go",
+      "sourceSha256": "e23c27c5c343568d0100767110cabf84c977bcca5acb17e221269027fdd91adf"
+    },
+    {
+      "source": "internal/oci/oci.go",
+      "sourceSha256": "0693a3642c27fbca69bfe75fd1f5cff2cd6dd74c6ef7a5e657f0877211e02454"
+    },
+    {
+      "source": "internal/oci/oci_test.go",
+      "sourceSha256": "d35d8d748230401415983daf95c1bc4f3d91bcf120bb4dd6e47498041413dd31"
+    }
+  ]
+}
