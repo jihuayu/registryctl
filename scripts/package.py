@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """从准确提交交叉编译并打包客户端，保留版本、校验值与许可证。"""
-import argparse, datetime, hashlib, json, os, pathlib, re, subprocess, tarfile, zipfile
+import argparse, datetime, hashlib, json, os, pathlib, re, subprocess, sys, tarfile, zipfile
+
+sys.stdout.reconfigure(encoding='utf-8')
+sys.stderr.reconfigure(encoding='utf-8')
 
 root = pathlib.Path(__file__).resolve().parents[1]
 p = argparse.ArgumentParser()

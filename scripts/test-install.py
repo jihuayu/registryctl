@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """用本地发布包验证安装和篡改拒绝，不访问真实下载源或覆盖用户程序。"""
-import os,pathlib,platform,shutil,subprocess,tempfile
+import os,pathlib,platform,shutil,subprocess,sys,tempfile
+sys.stdout.reconfigure(encoding='utf-8')
+sys.stderr.reconfigure(encoding='utf-8')
 root=pathlib.Path(__file__).resolve().parents[1]
 system={'Windows':'windows','Darwin':'darwin','Linux':'linux'}[platform.system()]
 arch={'AMD64':'amd64','x86_64':'amd64','aarch64':'arm64','arm64':'arm64'}[platform.machine()]
