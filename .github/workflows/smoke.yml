@@ -27,5 +27,9 @@ jobs:
           DOCKER_CONFIG: ${{ runner.temp }}/registryctl-docker
         run: |
           printf '%s' "$CLIENT_SECRET" | docker login registry.jihuayu.com --username "$CLIENT_ID" --password-stdin
-          docker pull "registry.jihuayu.com/home/registry@$DIGEST"
+          if ! docker pull "registry.jihuayu.com/home/registry@$DIGEST" > "$RUNNER_TEMP/registryctl-docker-pull.log" 2>&1; then
+            echo '原生 Docker 拉取失败，短期签名 URL 诊断未输出到公开日志' >&2
+            exit 1
+          fi
+          printf '原生 Docker 拉取通过：%s\n' "$DIGEST"
           docker logout registry.jihuayu.com

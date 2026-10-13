@@ -129,7 +129,11 @@ func safeFile(root, relative string) (string, error) {
 	if e != nil {
 		return "", e
 	}
-	abs, e := filepath.Abs(root)
+	canonicalRoot, e := filepath.EvalSymlinks(root)
+	if e != nil {
+		return "", e
+	}
+	abs, e := filepath.Abs(canonicalRoot)
 	if e != nil {
 		return "", e
 	}

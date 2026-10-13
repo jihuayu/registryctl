@@ -73,3 +73,34 @@ func TestDockerArchiveIsNotOCILayout(t *testing.T) {
 		t.Fatal("Docker archive accepted as OCI")
 	}
 }
+
+func TestAliasedLayoutRootAndEscapingMetadata(t *testing.T) {
+	root := layout(t)
+	alias := filepath.Join(t.TempDir(), "linked-layout")
+	if e := os.Symlink(root, alias); e != nil {
+		t.Skip("当前平台不允许创建目录符号链接")
+	}
+	image, e := Load(alias)
+	if e != nil {
+		t.Fatal("合法目录别名被拒绝", e)
+	}
+	image.Cleanup()
+	outside := filepath.Join(t.TempDir(), "outside-index.json")
+	data, e := os.ReadFile(filepath.Join(root, "index.json"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e = os.WriteFile(outside, data, 0600); e != nil {
+		t.Fatal(e)
+	}
+	if e = os.Remove(filepath.Join(root, "index.json")); e != nil {
+		t.Fatal(e)
+	}
+	if e = os.Symlink(outside, filepath.Join(root, "index.json")); e != nil {
+		t.Fatal(e)
+	}
+	if image, e = Load(alias); e == nil {
+		image.Cleanup()
+		t.Fatal("通过目录别名读取越界 metadata")
+	}
+}
