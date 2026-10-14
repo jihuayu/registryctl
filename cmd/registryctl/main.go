@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -30,18 +31,43 @@ func main() {
 }
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("使用 registryctl login / push / upload / logout")
+		return errors.New("使用 registryctl login / push / upload / docker-login / logout")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
 	defer cancel()
 	switch args[0] {
+	case "docker-login":
+		if len(args) != 2 {
+			return errors.New("使用 registryctl docker-login REGISTRY")
+		}
+		base, e := client.Base(args[1])
+		if e != nil {
+			return e
+		}
+		api, e := authenticated(base)
+		if e != nil {
+			return e
+		}
+		token, e := api.Token(ctx)
+		if e != nil {
+			return e
+		}
+		u, e := url.Parse(base)
+		if e != nil {
+			return e
+		}
+		command := exec.CommandContext(ctx, "docker", "login", u.Host, "--username", "token", "--password-stdin")
+		command.Stdin = strings.NewReader(token)
+		command.Stdout = os.Stdout
+		command.Stderr = os.Stderr
+		return command.Run()
 	case "version", "--version", "-v":
 		fmt.Printf("registryctl %s (%s, %s)\n", version, commit, buildDate)
 		return nil
 	case "help", "--help", "-h":
 		fmt.Println("registryctl：通过 Account 登录并将 OCI 镜像直接上传 R2")
-		fmt.Println("用法：registryctl login REGISTRY | push OCI_SOURCE REGISTRY/REPO:TAG | upload status/resume/abort | grant | logout | version")
-		fmt.Println("CI：设置 REGISTRY_ACCOUNT_CLIENT_ID / REGISTRY_ACCOUNT_CLIENT_SECRET 后直接执行 push，无需 login 或桌面凭据库")
+		fmt.Println("用法：registryctl login REGISTRY | push OCI_SOURCE REGISTRY/REPO:TAG | upload status/resume/abort | grant | docker-login REGISTRY | logout | version")
+		fmt.Println("GitHub Actions：id-token: write + REGISTRY_ACCOUNT_CLIENT_ID 即可使用 OIDC；其他 CI 仍支持 Client Secret")
 		return nil
 	case "login":
 		return login(ctx, args[1:])
@@ -104,7 +130,18 @@ func run(args []string) error {
 }
 func progress(message string) { fmt.Fprintln(os.Stderr, message) }
 func authenticated(base string) (*client.Client, error) {
-	if os.Getenv("REGISTRY_ACCOUNT_CLIENT_ID") != "" && os.Getenv("REGISTRY_ACCOUNT_CLIENT_SECRET") != "" {
+	method := os.Getenv("REGISTRY_ACCOUNT_AUTH")
+	if method == "machine" && (os.Getenv("REGISTRY_ACCOUNT_CLIENT_ID") == "" || os.Getenv("REGISTRY_ACCOUNT_CLIENT_SECRET") == "") {
+		return nil, errors.New("机器认证需要客户端 ID 和 Secret")
+	}
+	if method != "" && method != "machine" && method != "github-oidc" {
+		return nil, errors.New("REGISTRY_ACCOUNT_AUTH 只支持 machine 或 github-oidc")
+	}
+	oidc := method == "github-oidc" || (method == "" && os.Getenv("REGISTRY_ACCOUNT_CLIENT_SECRET") == "" && client.GitHubOIDCAvailable())
+	if oidc && (os.Getenv("REGISTRY_ACCOUNT_CLIENT_ID") == "" || !client.GitHubOIDCAvailable()) {
+		return nil, errors.New("GitHub OIDC 需要客户端 ID 和 Actions id-token: write")
+	}
+	if oidc || (os.Getenv("REGISTRY_ACCOUNT_CLIENT_ID") != "" && os.Getenv("REGISTRY_ACCOUNT_CLIENT_SECRET") != "") {
 		api := &client.Client{Base: base, HTTP: client.HTTPClient()}
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
@@ -119,7 +156,10 @@ func authenticated(base string) (*client.Client, error) {
 		if cap.Issuer != strings.TrimRight(issuer, "/") {
 			return nil, errors.New("服务端 issuer 与可信配置不一致")
 		}
-		credentials := client.Credentials{Registry: base, Issuer: issuer, Audience: cap.Audience, Mode: "machine", Scope: os.Getenv("REGISTRY_ACCOUNT_SCOPE")}
+		credentials := client.Credentials{Registry: base, Issuer: issuer, Audience: cap.Audience, ClientID: os.Getenv("REGISTRY_ACCOUNT_CLIENT_ID"), Mode: "machine", Scope: os.Getenv("REGISTRY_ACCOUNT_SCOPE")}
+		if oidc {
+			credentials.Mode = "github-oidc"
+		}
 		api.Token = api.Provider(&credentials)
 		return api, nil
 	}

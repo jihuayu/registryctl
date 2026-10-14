@@ -11,8 +11,8 @@
 Linux / macOS 一行安装到 `~/.local/bin`，脚本先验证下载包 SHA-256：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jihuayu/registryctl/v0.1.0/install.sh |
-  sh -s -- --version v0.1.0
+curl -fsSL https://raw.githubusercontent.com/jihuayu/registryctl/v0.2.0/install.sh |
+  sh -s -- --version v0.2.0
 export PATH="$HOME/.local/bin:$PATH"
 registryctl version
 ```
@@ -20,16 +20,16 @@ registryctl version
 也可以先下载、查看脚本，再运行：
 
 ```sh
-curl -fsSLO https://raw.githubusercontent.com/jihuayu/registryctl/v0.1.0/install.sh
-sh install.sh --version v0.1.0 --bin-dir "$HOME/.local/bin"
+curl -fsSLO https://raw.githubusercontent.com/jihuayu/registryctl/v0.2.0/install.sh
+sh install.sh --version v0.2.0 --bin-dir "$HOME/.local/bin"
 ```
 
 Git Bash 也可使用安装脚本。Windows PowerShell 手动下载 amd64 包并验证：
 
 ```powershell
-curl.exe -fL https://github.com/jihuayu/registryctl/releases/download/v0.1.0/registryctl_0.1.0_windows_amd64.zip -o registryctl.zip
-curl.exe -fL https://github.com/jihuayu/registryctl/releases/download/v0.1.0/SHA256SUMS -o SHA256SUMS
-$expected = ((Get-Content SHA256SUMS | Where-Object { $_ -match '  registryctl_0.1.0_windows_amd64.zip$' }) -split '  ')[0]
+curl.exe -fL https://github.com/jihuayu/registryctl/releases/download/v0.2.0/registryctl_0.2.0_windows_amd64.zip -o registryctl.zip
+curl.exe -fL https://github.com/jihuayu/registryctl/releases/download/v0.2.0/SHA256SUMS -o SHA256SUMS
+$expected = ((Get-Content SHA256SUMS | Where-Object { $_ -match '  registryctl_0.2.0_windows_amd64.zip$' }) -split '  ')[0]
 if ((Get-FileHash registryctl.zip -Algorithm SHA256).Hash.ToLower() -ne $expected) { throw 'SHA-256 不匹配' }
 Expand-Archive registryctl.zip -DestinationPath registryctl
 .\registryctl\registryctl.exe version
@@ -44,20 +44,22 @@ registryctl login registry.jihuayu.com
 registryctl push ./image.oci.tar registry.jihuayu.com/home/app:版本
 ```
 
-登录显示 Account PKCE 授权地址，浏览器完成授权后将刷新凭据保存到系统凭据库。Linux 交互登录需要可用的 Secret Service；没有桌面凭据库的 CI 使用下面的机器环境变量模式，不保存明文凭据。
+登录显示 Account PKCE 授权地址，浏览器完成授权后将刷新凭据保存到系统凭据库。Linux 交互登录需要可用的 Secret Service；没有桌面凭据库的 CI 使用下面的 OIDC 或机器环境变量模式，不保存明文凭据。
 
 OCI 输入可以是目录或 archive；支持单平台 Manifest 和多平台 Index。上传前验证原始 Blob 摘要，复用已存在对象，上传期间流式读文件，并等待服务端独立摘要校验。上传进度输出到 stderr，成功结果的 repository/tag/digest JSON 输出到 stdout。
 
 ## GitHub Actions 构建并推送
 
-在 Account 注册机器客户端，授予目标 Registry resource 的 `registry.pull registry.push`，并由仓库管理员给 `service:CLIENT_ID` 授予目标仓库 pull/push ACL。将 ID/Secret 存为 GitHub Repository 或 Environment Secrets：
+GitHub Actions 使用 OIDC，无需保存 Account Client Secret 或 R2 Key。先在 Account 绑定自己的 GitHub 账号，再为公开 OAuth 客户端配置 GitHub Actions 策略：
 
-- `REGISTRY_ACCOUNT_CLIENT_ID`
-- `REGISTRY_ACCOUNT_CLIENT_SECRET`
+- 控制台 → 应用 → 客户端策略 → GitHub Actions：关联当前用户已绑定的 GitHub 数字 ID。
+- 精确填写 repository ID、owner ID、仓库名、`refs/heads/main`、workflow ref 和 environment（未使用时留空）。例如 `OWNER/REPO/.github/workflows/push.yml@refs/heads/main`。
+- 为应用授予 Registry API 的机器访问，并只允许 `registry.pull registry.push`；绑定用户也必须具有相应角色和目标仓库 pull/push ACL。
+- 客户端 ID 是公开标识，可以写入 YAML 或 Repository Variables；不需要 Client Secret。部署的专用客户端 `registry-github` 只信任明确登记的仓库，不能直接用于其他仓库。
 
-只配置 GitHub Secrets 不会自动获得 Account 或仓库权限。不要在 fork PR 中注入生产凭据，不要把 Secret 或 R2 Key 写到 YAML。
+Account 验证 GitHub 签名、audience、固定 actor/repository/owner ID、分支、workflow、环境和事件。仅支持 `push`、`workflow_dispatch`，拒绝 PR 事件。令牌归属绑定的 Account 用户，权限取用户、应用、客户端和策略的交集，最长五分钟，无 refresh token。CLI 使用新的 GitHub assertion 自动续期；解绑 GitHub、禁用账号/客户端或修改策略会撤销相应访问。
 
-以下 workflow 在 main 提交后构建 OCI archive，调用 Action 直接推送到 R2，并输出 digest。修改 `home/app` 为机器身份已获授权的实际仓库：
+以下 workflow 在 main 提交后构建 OCI archive 并直传 R2。先登记自己的仓库策略，再修改客户端 ID、workflow 文件名和镜像路径：
 
 ```yaml
 name: 构建与推送
@@ -69,6 +71,9 @@ permissions:
 jobs:
   image:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -81,13 +86,13 @@ jobs:
           sbom: false
       - name: 直传 R2 并发布
         id: push
-        uses: jihuayu/registryctl@v0.1.0
+        uses: jihuayu/registryctl@v0.2.0
         with:
           source: ${{ runner.temp }}/image.oci.tar
           image: registry.jihuayu.com/home/app:${{ github.sha }}
         env:
-          REGISTRY_ACCOUNT_CLIENT_ID: ${{ secrets.REGISTRY_ACCOUNT_CLIENT_ID }}
-          REGISTRY_ACCOUNT_CLIENT_SECRET: ${{ secrets.REGISTRY_ACCOUNT_CLIENT_SECRET }}
+          REGISTRY_ACCOUNT_AUTH: github-oidc
+          REGISTRY_ACCOUNT_CLIENT_ID: ${{ vars.REGISTRY_ACCOUNT_CLIENT_ID }}
       - name: 显示不可变摘要
         env:
           DIGEST: ${{ steps.push.outputs.digest }}
@@ -98,13 +103,13 @@ Action 参数：
 
 | 参数 | 含义 |
 | --- | --- |
-| version | 留空使用 Action 对应 VERSION；可指定完整版本，例如 v0.1.0 |
+| version | 留空使用 Action 对应 VERSION；可指定完整版本，例如 v0.2.0 |
 | source | OCI archive 或 layout 目录 |
 | image | 完整 REGISTRY/REPOSITORY:TAG |
 
 同时省略 source/image 时只安装，把 registryctl 加入后续 step 的 PATH；推送时两项必须同时指定。`digest`、`image` 输出只有推送成功后才设置。支持 `@v1` 主版本别名，复现构建建议固定完整版本或提交 SHA；发布包信息会记录构建提交。
 
-也可以在普通脚本中使用：
+已有 M2M 客户端仍兼容 Client Secret，可在普通 CI 脚本中使用：
 
 ```sh
 export REGISTRY_ACCOUNT_CLIENT_ID='机器客户端 ID'
@@ -123,7 +128,15 @@ registryctl upload abort SESSION_ID --registry registry.jihuayu.com
 registryctl logout registry.jihuayu.com
 ```
 
-普通 Docker pull 使用标准 Registry token challenge，Blob 下载重定向 R2。Docker 凭据与 registryctl 分开配置，首版不提供 credential helper：
+普通 Docker pull 使用标准 Registry token challenge，Blob 下载重定向 R2。GitHub Actions 可使用 job 独立的 `DOCKER_CONFIG`，将短期令牌交给 Docker；令牌到期后重新登录：
+
+```sh
+registryctl docker-login registry.jihuayu.com
+docker pull registry.jihuayu.com/home/app:版本
+docker logout registry.jihuayu.com
+```
+
+命令支持当前 registryctl 登录方式（包括 OIDC），不是长期 Docker credential helper。旧的 M2M Secret 登录仍保留：
 
 ```sh
 printf '%s' "$REGISTRY_ACCOUNT_CLIENT_SECRET" |
@@ -139,7 +152,7 @@ docker pull registry.jihuayu.com/home/app:版本
 go test ./...
 go vet ./...
 python scripts/test-install.py
-python scripts/package.py --version v0.1.0
+python scripts/package.py --version v0.2.0
 ```
 
 源码来自自有客户端的固定提交，见 source.json；独立公开仓库继续维护 CLI。合并并验证后创建与 VERSION 对应的 vMAJOR.MINOR.PATCH 标签，GitHub Actions 自动从该提交生成六个平台附件及校验文件，正式 Release 不覆盖已有附件。

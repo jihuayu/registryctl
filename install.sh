@@ -1,13 +1,13 @@
 #!/bin/sh
 set -eu
 
-version='v0.1.0'
+version='v0.2.0'
 bin_dir="${HOME:?HOME 未设置}/.local/bin"
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --version) [ "$#" -ge 2 ] || { echo '--version 需要值' >&2; exit 1; }; version=$2; shift 2 ;;
     --bin-dir) [ "$#" -ge 2 ] || { echo '--bin-dir 需要值' >&2; exit 1; }; bin_dir=$2; shift 2 ;;
-    --help|-h) echo '用法：sh install.sh [--version v0.1.0] [--bin-dir ~/.local/bin]'; exit 0 ;;
+    --help|-h) echo '用法：sh install.sh [--version v0.2.0] [--bin-dir ~/.local/bin]'; exit 0 ;;
     *) echo "未知参数：$1" >&2; exit 1 ;;
   esac
 done

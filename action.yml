@@ -49,8 +49,8 @@ runs:
           echo '推送必须同时指定 source 和 image' >&2
           exit 1
         fi
-        if [ -z "${REGISTRY_ACCOUNT_CLIENT_ID:-}" ] || [ -z "${REGISTRY_ACCOUNT_CLIENT_SECRET:-}" ]; then
-          echo '请通过 GitHub Secrets 提供 Account 机器客户端 ID 和 Secret' >&2
+        if [ -z "${REGISTRY_ACCOUNT_CLIENT_ID:-}" ]; then
+          echo '请提供 Account 客户端 ID；GitHub OIDC job 需要 id-token: write' >&2
           exit 1
         fi
         result="$(mktemp "$RUNNER_TEMP/registryctl-result.XXXXXX")"

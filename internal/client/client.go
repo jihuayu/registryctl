@@ -137,7 +137,7 @@ func (c *Client) Provider(credentials *Credentials) func(context.Context) (strin
 	return func(ctx context.Context) (string, error) {
 		c.Mu.Lock()
 		defer c.Mu.Unlock()
-		if credentials.Mode == "machine" {
+		if credentials.Mode == "machine" || credentials.Mode == "github-oidc" {
 			if time.Now().Add(30 * time.Second).Before(credentials.Expires) {
 				return credentials.Access, nil
 			}
@@ -146,7 +146,13 @@ func (c *Client) Provider(credentials *Credentials) func(context.Context) (strin
 			if scope == "" {
 				scope = "registry.pull registry.push"
 			}
-			t, e := ac.Machine(ctx, os.Getenv("REGISTRY_ACCOUNT_CLIENT_ID"), os.Getenv("REGISTRY_ACCOUNT_CLIENT_SECRET"), scope)
+			var t account.Token
+			var e error
+			if credentials.Mode == "github-oidc" {
+				t, e = c.githubToken(ctx, credentials, scope)
+			} else {
+				t, e = ac.Machine(ctx, os.Getenv("REGISTRY_ACCOUNT_CLIENT_ID"), os.Getenv("REGISTRY_ACCOUNT_CLIENT_SECRET"), scope)
+			}
 			if e != nil {
 				return "", e
 			}
