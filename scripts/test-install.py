@@ -4,10 +4,12 @@ import os,pathlib,platform,shutil,subprocess,sys,tempfile
 sys.stdout.reconfigure(encoding='utf-8')
 sys.stderr.reconfigure(encoding='utf-8')
 root=pathlib.Path(__file__).resolve().parents[1]
+release=(root/'VERSION').read_text().strip()
+number=release.removeprefix('v')
 system={'Windows':'windows','Darwin':'darwin','Linux':'linux'}[platform.system()]
 arch={'AMD64':'amd64','x86_64':'amd64','aarch64':'arm64','arm64':'arm64'}[platform.machine()]
 shell=os.environ.get('REGISTRYCTL_TEST_SHELL','sh')
-subprocess.run(['python','scripts/package.py','--version','v0.1.0','--platform',system+'/'+arch],cwd=root,check=True)
+subprocess.run(['python','scripts/package.py','--version',release,'--platform',system+'/'+arch],cwd=root,check=True)
 with tempfile.TemporaryDirectory(prefix='registryctl-install-') as tmp:
     temp=pathlib.Path(tmp);fake=temp/'fake';fake.mkdir();downloads=temp/'downloads';downloads.mkdir()
     for file in (root/'dist').glob('*'):
@@ -18,7 +20,7 @@ set -eu
 url='';target=''
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    https://github.com/jihuayu/registryctl/releases/download/v0.1.0/*) url=$1; shift ;;
+    https://github.com/jihuayu/registryctl/releases/download/v*/*) url=$1; shift ;;
     -o) target=$2; shift 2 ;;
     *) shift ;;
   esac
@@ -34,9 +36,9 @@ cp "$TEST_DOWNLOADS/${url##*/}" "$target"
     subprocess.run(command,env=env,check=True)
     binary=install/('registryctl.exe' if system=='windows' else 'registryctl')
     version=subprocess.check_output([str(binary),'version'],text=True)
-    assert 'registryctl v0.1.0' in version
+    assert 'registryctl '+release in version
     before=binary.read_bytes()
-    (downloads/'SHA256SUMS').write_text('0'*64+'  registryctl_0.1.0_'+system+'_'+arch+('.zip' if system=='windows' else '.tar.gz')+'\n')
+    (downloads/'SHA256SUMS').write_text('0'*64+'  registryctl_'+number+'_'+system+'_'+arch+('.zip' if system=='windows' else '.tar.gz')+'\n')
     refused=subprocess.run(command,env=env,capture_output=True)
     assert refused.returncode!=0 and binary.read_bytes()==before,'篡改包被安装或覆盖现有程序'
 print('正常安装、嵌入版本和篡改校验拒绝通过')

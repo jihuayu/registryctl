@@ -6,4 +6,4 @@
 
 版本从 VERSION 开始，正式发布使用 vMAJOR.MINOR.PATCH 标签，GitHub Actions 从标签准确提交构建、校验、打包并发布 Release。v1 是供 Action 使用的主版本别名，只能由已经验收的正式版本向前更新。公开 Release 不覆盖已有附件。
 
-凭据、Token、签名 URL、生产配置和原始日志不得提交或输出。GitHub Actions 通过 repository/environment secrets 提供 Account 客户端凭据，不能要求 R2 通用凭据，也不能在不可信 PR 中使用生产 Secret。
+凭据、Token、签名 URL、生产配置和原始日志不得提交或输出。GitHub Actions 优先使用绑定 Account 用户的 OIDC 和精确 workflow 策略；兼容机器客户端时通过 repository/environment secrets 提供 Account 客户端凭据，不能要求 R2 通用凭据，也不能在不可信 PR 中使用生产 Secret。
